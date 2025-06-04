@@ -1,26 +1,35 @@
 import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { useTonConnectUI } from '@tonconnect/ui-react';
-import axios from 'axios';
 
 function App() {
+  // State for loading UI when connecting/disconnecting
   const [isLoading, setIsLoading] = useState(false);
-  const [tonConnectUI] = useTonConnectUI();
-  const [tonWalletAddress, setTonWalletAddress] = useState<string | null>(null);
-  const [username, setUsername] = useState('');
-  const [profilePic, setProfilePic] = useState<File | null>(null);
-  const [isRegistered, setIsRegistered] = useState(false);
 
+  // Hook to interact with Ton Connect UI
+  const [tonConnectUI] = useTonConnectUI();
+
+  // State to store connected wallet address
+  const [tonWalletAddress, setTonWalletAddress] = useState<string | null>(null);
+
+  // State to check if wallet check has been performed
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Handle connection by saving address and updating state
   const handleWalletConnection = useCallback((address: string) => {
     setTonWalletAddress(address);
-    setIsRegistered(false); // Assume not registered until we check
+    console.log('Connected to wallet:', address);
+    setIsLoaded(true);
   }, []);
 
+  // Handle disconnection
   const handleWalletDisconnection = useCallback(() => {
     setTonWalletAddress(null);
-    setIsRegistered(false);
+    console.log('Disconnected wallet');
+    setIsLoaded(true);
   }, []);
 
+  // Effect to check wallet status and subscribe to status changes
   useEffect(() => {
     const checkWalletConnection = async () => {
       if (tonConnectUI.account?.address) {
@@ -32,6 +41,7 @@ function App() {
 
     checkWalletConnection();
 
+    // Subscribe to wallet status changes
     const unsubscribe = tonConnectUI.onStatusChange((wallet) => {
       if (wallet) {
         handleWalletConnection(wallet.account.address);
@@ -40,85 +50,58 @@ function App() {
       }
     });
 
-    return () => unsubscribe();
+    // Cleanup subscription on unmount
+    return () => {
+      unsubscribe();
+    };
   }, [tonConnectUI, handleWalletConnection, handleWalletDisconnection]);
 
-  const handleRegister = async () => {
-    if (!tonWalletAddress || !username || !profilePic) return;
-    setIsLoading(true);
-
-    const formData = new FormData();
-    formData.append('walletAddress', tonWalletAddress);
-    formData.append('username', username);
-    formData.append('profilePic', profilePic);
-
-    try {
-      await axios.post('http://localhost:5000/api/users/register', formData);
-      setIsRegistered(true);
-      alert('Registration successful!');
-    } catch (error) {
-      console.error('Registration failed:', error);
-    } finally {
+  // Function to handle connect/disconnect actions
+  const handleWalletAction = async () => {
+    if (tonConnectUI.connected) {
+      setIsLoading(true);
+      await tonConnectUI.disconnect();
       setIsLoading(false);
+    } else {
+      await tonConnectUI.openModal();
     }
   };
 
+  // Format wallet address for display
   const formatAddress = (address: string | null) => {
     if (!address) return '';
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
   };
 
-  if (isLoading) {
+  // Show loading screen while checking wallet status
+  if (!isLoaded || isLoading) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center">
         <div className="bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded">
-          Loading...
+          {isLoading ? 'Loading...' : 'Checking wallet...'}
         </div>
       </main>
     );
   }
 
+  // Main UI
   return (
     <main className="flex min-h-screen flex-col items-center justify-center">
-      <h1 className="text-4xl font-bold mb-8">Ton Voting App</h1>
+      <h1 className="text-4xl font-bold mb-8">Telegram Voting App</h1>
       {tonWalletAddress ? (
-        <>
-          <p>Connected: {formatAddress(tonWalletAddress)}</p>
-
-          {!isRegistered && (
-            <div className="flex flex-col items-center mt-4">
-              <input
-                type="text"
-                placeholder="Enter username"
-                className="mb-2 px-2 py-1 border"
-                onChange={(e) => setUsername(e.target.value)}
-              />
-              <input
-                type="file"
-                accept="image/*"
-                className="mb-2"
-                onChange={(e) => setProfilePic(e.target.files?.[0] || null)}
-              />
-              <button
-                onClick={handleRegister}
-                className="bg-green-500 text-white font-bold py-2 px-4 rounded hover:bg-green-600"
-              >
-                Register
-              </button>
-            </div>
-          )}
-
+        <div className="flex flex-col items-center">
+          <p className='bg-blue-500 text-white font-bold py-2 px-4 rounded mt-4 hover:bg-blue-600 transition-colors duration-300'>Connected: {formatAddress(tonWalletAddress)}</p>
           <button
-            onClick={async () => await tonConnectUI.disconnect()}
-            className="mt-4 bg-red-500 text-white font-bold py-2 px-4 rounded hover:bg-red-600"
+            onClick={handleWalletAction}
+            className="bg-blue-500 text-white font-bold py-2 px-4 rounded mt-4 hover:bg-blue-600 transition-colors duration-300"
           >
             Disconnect Wallet
           </button>
-        </>
+        </div>
       ) : (
         <button
-          onClick={async () => await tonConnectUI.openModal()}
-          className="bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-600"
+          onClick={handleWalletAction}
+          className="bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-600 transition-colors duration-300"
         >
           Connect Ton Wallet
         </button>
